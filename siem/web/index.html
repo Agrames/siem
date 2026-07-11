@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>siem</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: system-ui, sans-serif;
+    background: #0d1117; color: #c9d1d9;
+  }
+  header {
+    padding: 14px 20px; border-bottom: 1px solid #21262d;
+    display: flex; align-items: baseline; gap: 12px;
+  }
+  header h1 { margin: 0; font-size: 18px; letter-spacing: .5px; }
+  header .dot { color: #3fb950; }
+  main { display: grid; grid-template-columns: 360px 1fr; gap: 0; height: calc(100vh - 51px); }
+  section { padding: 14px 18px; overflow-y: auto; }
+  #alerts { border-right: 1px solid #21262d; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #8b949e; margin: 0 0 10px; }
+  .alert {
+    background: #161b22; border: 1px solid #f8514922; border-left: 3px solid #f85149;
+    border-radius: 6px; padding: 9px 11px; margin-bottom: 8px;
+  }
+  .alert .rule { color: #f85149; font-weight: 600; font-size: 13px; }
+  .alert .meta { color: #8b949e; font-size: 12px; margin-top: 3px; }
+  #feed { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; }
+  .row { padding: 3px 0; border-bottom: 1px solid #161b22; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .t { color: #6e7681; }
+  .row .h { color: #58a6ff; }
+  .row .a { color: #d2a8ff; }
+  .sev-0,.sev-1,.sev-2,.sev-3 { color: #f85149; }
+  .sev-4 { color: #d29922; }
+  .empty { color: #6e7681; font-style: italic; }
+</style>
+</head>
+<body>
+<header>
+  <h1>siem <span class="dot">&#9679;</span></h1>
+  <span id="status" class="empty">connecting...</span>
+</header>
+<main>
+  <section id="alerts">
+    <h2>Alerts</h2>
+    <div id="alertList"><div class="empty">none yet</div></div>
+  </section>
+  <section>
+    <h2>Live events</h2>
+    <div id="feed"></div>
+  </section>
+</main>
+<script>
+const feed = document.getElementById("feed");
+const status = document.getElementById("status");
+const sevName = ["emerg","alert","crit","err","warn","notice","info","debug"];
+
+function addRow(ev) {
+  const div = document.createElement("div");
+  div.className = "row";
+  const t = new Date(ev.ts).toLocaleTimeString();
+  const sev = ev.severity == null ? "" : `<span class="sev-${ev.severity}">${sevName[ev.severity]||ev.severity}</span> `;
+  div.innerHTML =
+    `<span class="t">${t}</span> ${sev}` +
+    `<span class="h">${ev.host||"?"}</span> ` +
+    `<span class="a">${ev.app||""}</span> ${escapeHtml(ev.message||"")}`;
+  feed.prepend(div);
+  while (feed.childElementCount > 300) feed.lastChild.remove();
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+}
+
+async function loadAlerts() {
+  try {
+    const r = await fetch("/api/alerts?limit=50");
+    const alerts = await r.json();
+    const list = document.getElementById("alertList");
+    if (!alerts.length) { list.innerHTML = '<div class="empty">none yet</div>'; return; }
+    list.innerHTML = alerts.map(a =>
+      `<div class="alert"><div class="rule">${a.rule}</div>` +
+      `<div class="meta">${a.entity||""} &middot; count ${a.count} &middot; ${new Date(a.ts).toLocaleTimeString()}</div></div>`
+    ).join("");
+  } catch (e) {}
+}
+
+const es = new EventSource("/api/stream");
+es.addEventListener("log", e => addRow(JSON.parse(e.data)));
+es.onopen = () => status.textContent = "live";
+es.onerror = () => status.textContent = "reconnecting...";
+
+loadAlerts();
+setInterval(loadAlerts, 5000);
+</script>
+</body>
+</html>

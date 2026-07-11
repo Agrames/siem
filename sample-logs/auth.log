@@ -1,0 +1,13 @@
+<86>Jul 11 22:13:01 webserver sshd[2001]: Accepted password for david from 10.0.0.5 port 51314 ssh2
+<86>Jul 11 22:13:40 webserver sshd[2010]: Failed password for invalid user oracle from 198.51.100.23 port 4001 ssh2
+<78>Jul 11 22:14:00 webserver cron[1440]: (root) CMD (/usr/bin/backup.sh)
+<86>Jul 11 22:14:16 webserver sshd[2101]: Failed password for invalid user admin from 203.0.113.7 port 4242 ssh2
+<86>Jul 11 22:14:24 webserver sshd[2102]: Failed password for invalid user admin from 203.0.113.7 port 4250 ssh2
+<86>Jul 11 22:14:31 webserver sshd[2103]: Failed password for root from 203.0.113.7 port 4258 ssh2
+<86>Jul 11 22:14:39 webserver sshd[2104]: Failed password for root from 203.0.113.7 port 4267 ssh2
+<86>Jul 11 22:14:47 webserver sshd[2105]: Failed password for invalid user test from 203.0.113.7 port 4275 ssh2
+<86>Jul 11 22:14:55 webserver sshd[2106]: Failed password for invalid user git from 203.0.113.7 port 4283 ssh2
+<86>Jul 11 22:15:10 webserver sshd[2110]: Failed password for invalid user postgres from 198.51.100.23 port 4020 ssh2
+<34>1 2026-07-11T22:15:20.003Z webserver su 1234 ID47 - 'su root' failed for david
+<85>Jul  1 09:05:00 dbhost sudo: pam_unix(sudo:auth): authentication failure logname=deploy uid=1000
+<86>Jul 11 22:16:02 webserver sshd[2201]: Accepted publickey for david from 10.0.0.5 port 51402 ssh2
