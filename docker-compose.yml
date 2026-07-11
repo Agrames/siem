@@ -1,0 +1,44 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: siem
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-siem}
+      POSTGRES_DB: siem
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U siem"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  collector:
+    build: .
+    command: python -m siem.collector
+    environment:
+      DATABASE_URL: postgresql://siem:${POSTGRES_PASSWORD:-siem}@db:5432/siem
+      SIEM_WEBHOOK_URL: ${SIEM_WEBHOOK_URL:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      # syslog is published to localhost ONLY. never expose these to the internet.
+      - "127.0.0.1:5514:5514/udp"
+      - "127.0.0.1:5514:5514/tcp"
+
+  api:
+    build: .
+    command: uvicorn siem.api:app --host 0.0.0.0 --port 8000
+    environment:
+      DATABASE_URL: postgresql://siem:${POSTGRES_PASSWORD:-siem}@db:5432/siem
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      # dashboard on localhost; on the server this is what the Cloudflare Tunnel points at
+      - "127.0.0.1:8000:8000"
+
+volumes:
+  pgdata:
