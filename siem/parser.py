@@ -34,4 +34,38 @@ def parse_line(raw: str, *, received_at: datetime | None = None,
     Always keep the original line in Event.raw, and pass received_at / source_ip
     straight through onto the Event.
     """
-    raise NotImplementedError("parse_line: implement RFC 5424 and RFC 3164 parsing")
+    if not raw.strip():
+        return None
+    
+    end = raw.index(">")
+    pri = int(raw[1:end])
+    facility, severity = decode_pri(pri)
+    rest = raw[end + 1:].strip()
+   
+
+    if rest[0].isdigit():
+        parts = rest.split(" ", 7)
+        timestamp = datetime.fromisoformat(parts[1])
+        host = parts[2]
+        app = parts[3]
+        pid = int(parts[4])
+        message = parts[7]
+    else:
+        ts_text = rest[:15]
+        the_rest = rest[16:]
+        year = received_at.year if received_at else datetime.now().year
+        timestamp = datetime.strptime(f"{ts_text} {year}", "%b %d %H:%M:%S %Y")
+        host, tag_and_msg = the_rest.split(" ", 1)
+        tag, message = tag_and_msg.split(": ", 1)
+        if "[" in tag:
+            app, pid_str = tag.split("[", 1)
+            pid = int(pid_str.rstrip("]:"))
+        else:
+            app = tag.rstrip(":")
+            pid = None
+
+
+    return Event(ts=timestamp, host=host, message=message, raw=raw, app=app, pid=pid,
+                 facility=facility, severity=severity, received_at=received_at,
+                 source_ip=source_ip)
+        
