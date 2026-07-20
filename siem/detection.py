@@ -22,6 +22,7 @@ class BruteForceDetector:
         self.fired: set[str] = set()
 
     def process(self, event: Event) -> Alert | None:
+        
         """
         Feed one Event. Return an Alert the moment an IP first crosses the threshold
         inside the window, otherwise None.
@@ -39,5 +40,25 @@ class BruteForceDetector:
            and add the IP to self.fired
         5. if a previously fired IP drops back below threshold, remove it from
            self.fired so a fresh burst later can alert again
+
+           im just going to type my straight thoughts in
+           an event returns an alert when ip crosses the threshold otehrwise it returns None
+           filter out anything that isnt an sshd "failed password event"
+           pull the attacker ip out from the message
+           push event.ts onto that ips deque then drop timestamps older than the window
+           if count = treshold and ip not in self.fired, build and return an alert and add the ip to self.fired
+           if previously fired < threshold, remove from self.fired and return a new alert if it crosses the threshold again
         """
-        raise NotImplementedError("BruteForceDetector.process: implement the sliding window")
+
+        if "Failed password" not in event.message or "sshd" not in event.app:
+            return None
+        words = event.message.split(" ")
+        ip_position= words.index("from") + 1
+        ip = words[ip_position]
+        self.hits[ip].append(event.ts)
+        while self.hits[ip] and event.ts - self.hits[ip][0] > self.window:
+            self.hits[ip].popleft()
+        if len(self.hits[ip]) >= self.threshold and ip not in self.fired:
+            self.fired.add(ip)
+            return Alert(rule="ssh-brute-force", entity= ip, ts= event.ts, count= len(self.hits[ip]), severity= Severity.WARNING)
+        return None
