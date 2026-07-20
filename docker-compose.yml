@@ -1,6 +1,7 @@
 services:
   db:
     image: postgres:16
+    restart: unless-stopped
     environment:
       POSTGRES_USER: siem
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-siem}
@@ -16,6 +17,7 @@ services:
 
   collector:
     build: .
+    restart: unless-stopped
     command: python -m siem.collector
     environment:
       DATABASE_URL: postgresql://siem:${POSTGRES_PASSWORD:-siem}@db:5432/siem
@@ -30,6 +32,7 @@ services:
 
   api:
     build: .
+    restart: unless-stopped
     command: uvicorn siem.api:app --host 0.0.0.0 --port 8000
     environment:
       DATABASE_URL: postgresql://siem:${POSTGRES_PASSWORD:-siem}@db:5432/siem
