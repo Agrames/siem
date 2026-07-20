@@ -4,7 +4,7 @@ A security tool that watches a server for break-in attempts and flags them in re
 
 **Live demo: https://siem.davidagugharam.com**
 
-## What it does (in plain English)
+## What it does
 
 Servers get attacked constantly. The most common attack is simple: someone tries to log
 in over and over, guessing passwords and hoping one works, like a burglar trying thousands
