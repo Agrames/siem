@@ -1,7 +1,7 @@
 """Parse raw syslog lines into normalized Events. YOU write this part."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from .models import Event, decode_pri
 
@@ -44,17 +44,25 @@ def parse_line(raw: str, *, received_at: datetime | None = None,
    
 
     if rest[0].isdigit():
-        parts = rest.split(" ", 7)
-        timestamp = datetime.fromisoformat(parts[1])
+        # VERSION TIMESTAMP HOST APP PROCID MSGID, then structured data and the message
+        parts = rest.split(" ", 6)
+        timestamp = _as_utc(datetime.fromisoformat(parts[1]))
         host = parts[2]
-        app = parts[3]
-        pid = int(parts[4])
-        message = parts[7]
+        app = _nil(parts[3])
+        procid = _nil(parts[4])
+        # PROCID is any string in 5424 (e.g. "worker-3"); only a number is a pid
+        pid = int(procid) if procid and procid.isdigit() else None
+        message = _skip_structured_data(parts[6]) if len(parts) > 6 else ""
     else:
         ts_text = rest[:15]
         the_rest = rest[16:]
-        year = received_at.year if received_at else datetime.now().year
-        timestamp = datetime.strptime(f"{ts_text} {year}", "%b %d %H:%M:%S %Y")
+        now = _as_utc(received_at) if received_at else datetime.now(timezone.utc)
+        # 3164 timestamps carry no timezone; treat them as UTC like everything else
+        timestamp = datetime.strptime(f"{ts_text} {now.year}", "%b %d %H:%M:%S %Y")
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
+        # no year either: a Dec 31 line that arrives on Jan 1 belongs to last year
+        if timestamp - now > timedelta(days=1):
+            timestamp = timestamp.replace(year=timestamp.year - 1)
         host, tag_and_msg = the_rest.split(" ", 1)
         tag, message = tag_and_msg.split(": ", 1)
         if "[" in tag:
@@ -69,3 +77,37 @@ def parse_line(raw: str, *, received_at: datetime | None = None,
                  facility=facility, severity=severity, received_at=received_at,
                  source_ip=source_ip)
         
+
+
+def _nil(field: str) -> str | None:
+    # "-" is the 5424 NILVALUE: the field is not present
+    return None if field == "-" else field
+
+
+def _as_utc(dt: datetime) -> datetime:
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+
+
+def _skip_structured_data(rest: str) -> str:
+    """Return MSG from "STRUCTURED-DATA MSG". Structured data is "-" or one or more
+    [id key="value" ...] blocks, and quoted values may contain spaces, "]" and \-escapes,
+    so it can't just be split on spaces."""
+    if rest == "-" or rest.startswith("- "):
+        return rest[2:]
+    if not rest.startswith("["):
+        return rest  # sender left structured data out entirely; treat it all as the message
+    in_quotes = False
+    i = 0
+    while i < len(rest):
+        c = rest[i]
+        if in_quotes:
+            if c == "\\":
+                i += 1  # skip the escaped character
+            elif c == '"':
+                in_quotes = False
+        elif c == '"':
+            in_quotes = True
+        elif c == "]" and not rest.startswith("[", i + 1):
+            return rest[i + 2:]
+        i += 1
+    return ""

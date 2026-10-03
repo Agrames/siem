@@ -33,11 +33,15 @@ async def handle_line(raw: str, source_ip: str | None) -> None:
         return
     if ev is None:
         return
-    await storage.insert_event(ev)
-    alert = detector.process(ev)
-    if alert is not None:
-        await storage.insert_alert(alert)
-        await alerting.dispatch(alert)
+    try:
+        await storage.insert_event(ev)
+        alert = detector.process(ev)
+        if alert is not None:
+            await storage.insert_alert(alert)
+            await alerting.dispatch(alert)
+    except Exception as e:
+        # one bad line or a database hiccup must not kill the TCP connection it came in on
+        print(f"[collector] pipeline error: {e!r} on line: {raw[:200]}")
 
 
 class _UDPProtocol(asyncio.DatagramProtocol):
@@ -52,12 +56,14 @@ class _UDPProtocol(asyncio.DatagramProtocol):
 async def _handle_tcp(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
     peer = writer.get_extra_info("peername")
     ip = peer[0] if peer else None
-    while True:
-        line = await reader.readline()
-        if not line:
-            break
-        await handle_line(line.decode("utf-8", errors="replace"), ip)
-    writer.close()
+    try:
+        while True:
+            line = await reader.readline()
+            if not line:
+                break
+            await handle_line(line.decode("utf-8", errors="replace"), ip)
+    finally:
+        writer.close()  # also on a dropped connection, so sockets don't leak
 
 
 async def main() -> None:

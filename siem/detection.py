@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 from collections import defaultdict, deque
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from .models import Alert, Event, Severity
+
+_MIN_SWEEP_AT = 1024
 
 
 class BruteForceDetector:
@@ -20,6 +22,8 @@ class BruteForceDetector:
         self.hits: dict[str, deque] = defaultdict(deque)
         # IPs we've already alerted on, so we don't fire again every event during a burst
         self.fired: set[str] = set()
+        # once this many IPs are tracked, forget the idle ones (see _sweep)
+        self._sweep_at = _MIN_SWEEP_AT
 
     def process(self, event: Event) -> Alert | None:
         
@@ -50,11 +54,13 @@ class BruteForceDetector:
            if previously fired < threshold, remove from self.fired and return a new alert if it crosses the threshold again
         """
 
-        if "Failed password" not in event.message or "sshd" not in event.app:
+        if "Failed password" not in event.message or not event.app or "sshd" not in event.app:
             return None
-        words = event.message.split(" ")
-        ip_position= words.index("from") + 1
-        ip = words[ip_position]
+        ip = _attacker_ip(event.message)
+        if ip is None:
+            return None
+        if len(self.hits) >= self._sweep_at:
+            self._sweep(event.ts)
         self.hits[ip].append(event.ts)
         while self.hits[ip] and event.ts - self.hits[ip][0] > self.window:
             self.hits[ip].popleft()
@@ -65,3 +71,23 @@ class BruteForceDetector:
             self.fired.add(ip)
             return Alert(rule="ssh-brute-force", entity= ip, ts= event.ts, count= len(self.hits[ip]), severity= Severity.WARNING)
         return None
+
+    def _sweep(self, now: datetime) -> None:
+        # drop IPs with no failures inside the window. Without this, every scanner IP ever
+        # seen stays in memory forever. Sweeping only when the table has doubled keeps the
+        # cost to O(1) per event on average.
+        idle = [ip for ip, ts in self.hits.items() if not ts or now - ts[-1] > self.window]
+        for ip in idle:
+            del self.hits[ip]
+            self.fired.discard(ip)
+        self._sweep_at = max(_MIN_SWEEP_AT, 2 * len(self.hits))
+
+
+def _attacker_ip(message: str) -> str | None:
+    # sshd writes "... for <user> from <ip> port <n> ssh2". The username is chosen by the
+    # attacker and can itself contain " from <ip>", so use the LAST " from ", which sshd wrote.
+    _, sep, tail = message.rpartition(" from ")
+    words = tail.split()
+    if not sep or not words:
+        return None
+    return words[0]

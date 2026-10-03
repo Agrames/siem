@@ -53,3 +53,51 @@ def test_keeps_raw_line():
     line = "<86>Jul 11 22:14:16 webserver sshd[2001]: Failed password for root from 10.0.0.1 port 22 ssh2"
     ev = parse_line(line)
     assert ev.raw == line
+
+
+def test_rfc5424_nil_procid_and_app_become_none():
+    line = "<34>1 2026-07-11T22:14:15Z host - - ID47 - something happened"
+    ev = parse_line(line)
+    assert ev.app is None
+    assert ev.pid is None
+    assert ev.message == "something happened"
+
+
+def test_rfc5424_non_numeric_procid_is_not_a_pid():
+    ev = parse_line("<34>1 2026-07-11T22:14:15Z host app worker-3 ID47 - hi")
+    assert ev.app == "app"
+    assert ev.pid is None
+    assert ev.message == "hi"
+
+
+def test_rfc5424_structured_data_with_spaces_is_not_part_of_the_message():
+    line = ('<165>1 2026-07-11T22:14:15Z host evntslog - ID47 '
+            '[exampleSDID@32473 iut="3" eventSource="App lication"][x@1 v="a]b"] An application event')
+    ev = parse_line(line)
+    assert ev.message == "An application event"
+
+
+def test_rfc5424_without_message():
+    ev = parse_line("<34>1 2026-07-11T22:14:15Z host app 1 ID47 -")
+    assert ev.message == ""
+
+
+def test_rfc3164_timestamp_is_utc_aware():
+    # 5424 timestamps are timezone-aware; 3164 ones must be too, or comparing them raises
+    ev = parse_line("<86>Jul 11 22:14:16 webserver sshd[2001]: hi",
+                    received_at=datetime(2026, 7, 11, 22, 14, 20, tzinfo=timezone.utc))
+    assert ev.ts == datetime(2026, 7, 11, 22, 14, 16, tzinfo=timezone.utc)
+
+
+def test_rfc3164_space_padded_day():
+    ev = parse_line("<78>Jul  1 09:00:00 host1 cron: job ran",
+                    received_at=datetime(2026, 7, 1, 9, 0, 5, tzinfo=timezone.utc))
+    assert ev.ts == datetime(2026, 7, 1, 9, 0, 0, tzinfo=timezone.utc)
+    assert ev.host == "host1"
+
+
+def test_rfc3164_new_year_rollover():
+    # a line stamped Dec 31 that arrives just after midnight on Jan 1 belongs to last year
+    ev = parse_line("<86>Dec 31 23:59:58 webserver sshd[1]: hi",
+                    received_at=datetime(2027, 1, 1, 0, 0, 2, tzinfo=timezone.utc))
+    assert ev.ts == datetime(2026, 12, 31, 23, 59, 58, tzinfo=timezone.utc)
