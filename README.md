@@ -1,62 +1,47 @@
 # siem
 
-A security tool that watches a server for break-in attempts and flags them in real time.
+A security tool that spots someone trying to break into a server and raises an alarm.
 
 ## What it does
 
-Servers get attacked constantly. The most common attack is simple: someone tries to log
-in over and over, guessing passwords and hoping one works, like a burglar trying thousands
-of keys in a lock. One failed login is normal (we all mistype passwords). Fifty failed
-logins from the same place in two minutes is an attack.
+The most common way to break into a server is to guess passwords over and over, like a
+burglar trying thousands of keys in a lock.
 
-This tool watches the stream of login activity, spots that pattern, and raises an alert the
-moment it sees someone hammering the door, while ignoring the everyday noise. Everything
-shows up on a live dashboard.
-
-It is a small, built-from-scratch version of the kind of monitoring system that professional
-security teams use to keep an eye on their systems.
+One wrong password is normal; everyone makes typos. Five or more from the same place within
+two minutes is treated as an attack. This tool watches every login attempt, spots that
+pattern, and shows an alert on a live dashboard.
 
 ## How it works
 
-Each log message passes through five steps:
-
-1. **Collect** — listen for log messages coming from a server.
-2. **Read** — make sense of each message (they arrive as messy text) and pull out the useful
-   parts: who, when, and what happened.
-3. **Store** — save them to a database.
-4. **Detect** — watch for the attack pattern: too many failed logins from one place, too fast.
-5. **Alert** — when it spots one, raise an alert and show it on the dashboard.
+1. **Listen:** collect login activity from a server.
+2. **Understand:** turn each raw message into who, when, and what happened.
+3. **Save:** store it in a database.
+4. **Detect:** look for too many failed logins from one place in a short time.
+5. **Alert:** flag the attack on the dashboard.
 
 ## Built with
 
-Python, PostgreSQL, Docker, and FastAPI. It previously ran as a public demo on a cloud server
-behind a Cloudflare tunnel; that hosted demo has been retired. The heart of it, reading the
-log messages and detecting the attacks, is written from scratch rather than using an
-off-the-shelf tool, so every part is understood rather than just wired together.
+Python, PostgreSQL, Docker and FastAPI. The core (understanding messages and detecting
+attacks) is written from scratch rather than using an off-the-shelf tool.
 
-## Run it yourself
+## Try it (for developers)
 
-Everything runs on your own machine with Docker. The attacks are simulated, so nothing real
-is touched.
+There is no online demo. It runs on your own computer with Docker, using fake attacks, so
+nothing real is at risk.
 
 ```
 git clone https://github.com/Agrames/siem.git
 cd siem
-docker compose up                            # start everything (leave this running)
+docker compose up
 ```
 
-In a second terminal, from the same folder:
+In a second terminal window:
 
 ```
-python3 tools/simulate.py attack 45.9.1.8    # fire a fake attack and watch it get caught
+python3 tools/simulate.py attack 45.9.1.8
 ```
 
-Then open the dashboard at http://localhost:8000. It shows a live feed of incoming activity
-and any alerts the system has raised. Each address only triggers one alert until the collector
-restarts, so use a different one (45.9.1.9, 45.9.1.10, ...) each time you run `attack`.
+Open http://localhost:8000 to see the alert. Each address alerts only once, so change the
+last number (45.9.1.9, 45.9.1.10, ...) to try again.
 
-Run the tests with:
-
-```
-uv run pytest
-```
+Run the tests with `uv run pytest`.
