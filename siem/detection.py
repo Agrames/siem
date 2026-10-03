@@ -58,6 +58,9 @@ class BruteForceDetector:
         self.hits[ip].append(event.ts)
         while self.hits[ip] and event.ts - self.hits[ip][0] > self.window:
             self.hits[ip].popleft()
+        # the previous burst has died down, so a fresh one later counts as a new attack
+        if len(self.hits[ip]) < self.threshold:
+            self.fired.discard(ip)
         if len(self.hits[ip]) >= self.threshold and ip not in self.fired:
             self.fired.add(ip)
             return Alert(rule="ssh-brute-force", entity= ip, ts= event.ts, count= len(self.hits[ip]), severity= Severity.WARNING)

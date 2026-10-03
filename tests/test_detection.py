@@ -69,3 +69,27 @@ def test_fires_once_not_repeatedly():
         if a:
             fired += 1
     assert fired == 1
+
+
+def test_fires_again_when_attacker_returns_after_going_quiet():
+    # attack, go quiet for longer than the window, attack again -> two separate alerts
+    det = BruteForceDetector(threshold=5, window_seconds=120)
+    base = datetime(2026, 7, 11, 22, 0, 0, tzinfo=timezone.utc)
+    later = base + timedelta(minutes=10)
+    fired = 0
+    for start in (base, later):
+        for i in range(5):
+            if det.process(_failed_login("203.0.113.7", start + timedelta(seconds=i * 10))):
+                fired += 1
+    assert fired == 2
+
+
+def test_long_sustained_attack_fires_once():
+    # failures every 10s for 5 minutes never drop below the threshold, so it stays one attack
+    det = BruteForceDetector(threshold=5, window_seconds=120)
+    base = datetime(2026, 7, 11, 22, 0, 0, tzinfo=timezone.utc)
+    fired = 0
+    for i in range(30):
+        if det.process(_failed_login("203.0.113.7", base + timedelta(seconds=i * 10))):
+            fired += 1
+    assert fired == 1

@@ -8,10 +8,9 @@ The collector must be running (docker compose up). Then, from the project folder
   uv run python tools/simulate.py ok david             # a normal, successful login (never alerts)
   uv run python tools/simulate.py raw "<86>..."        # send any raw syslog line you write yourself
 
-Tip: use a DIFFERENT ip each time you run 'attack'. Once your detector has
-alerted on an ip it remembers it and won't alert again (that is your fire-once
-rule working). To forget them all, restart the collector:
-  docker compose restart collector
+Tip: an ip alerts once per attack. To see a second alert, either use a
+different ip, or let that ip go quiet for longer than the detection window
+(2 minutes by default) and attack again.
 """
 import socket
 import sys

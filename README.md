@@ -41,7 +41,7 @@ In a second terminal window:
 python3 tools/simulate.py attack 45.9.1.8
 ```
 
-Open http://localhost:8000 to see the alert. Each address alerts only once, so change the
-last number (45.9.1.9, 45.9.1.10, ...) to try again.
+Open http://localhost:8000 to see the alert. To try again, wait two minutes or change the
+last number (45.9.1.9, 45.9.1.10, ...).
 
 Run the tests with `uv run pytest`.
