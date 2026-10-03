@@ -93,3 +93,49 @@ def test_long_sustained_attack_fires_once():
         if det.process(_failed_login("203.0.113.7", base + timedelta(seconds=i * 10))):
             fired += 1
     assert fired == 1
+
+
+def _ssh_event(message, ts, app="sshd"):
+    return Event(ts=ts, host="webserver", app=app, message=message, raw="raw line")
+
+
+def test_username_cannot_hide_the_real_attacker_ip():
+    # the username is attacker-controlled; stuffing a fake " from <ip>" into it must not
+    # spread the attempts across fake IPs and dodge the threshold
+    det = BruteForceDetector(threshold=5, window_seconds=120)
+    base = datetime(2026, 7, 11, 22, 0, 0, tzinfo=timezone.utc)
+    alerts = []
+    for i in range(5):
+        msg = f"Failed password for invalid user x from 10.9.9.{i} from 45.9.1.8 port 4242 ssh2"
+        a = det.process(_ssh_event(msg, base + timedelta(seconds=i)))
+        if a:
+            alerts.append(a)
+    assert len(alerts) == 1
+    assert alerts[0].entity == "45.9.1.8"
+
+
+def test_malformed_failed_password_lines_are_ignored_not_crashing():
+    det = BruteForceDetector(threshold=1, window_seconds=120)
+    ts = datetime(2026, 7, 11, 22, 0, 0, tzinfo=timezone.utc)
+    assert det.process(_ssh_event("Failed password for root", ts)) is None
+    assert det.process(_ssh_event("Failed password for root from", ts)) is None
+
+
+def test_event_without_app_is_ignored():
+    det = BruteForceDetector(threshold=1, window_seconds=120)
+    ts = datetime(2026, 7, 11, 22, 0, 0, tzinfo=timezone.utc)
+    msg = "Failed password for root from 10.0.0.1 port 22 ssh2"
+    assert det.process(_ssh_event(msg, ts, app=None)) is None
+
+
+def test_memory_does_not_grow_with_every_ip_ever_seen():
+    # a public SSH server sees thousands of scanner IPs a day; only recent ones should be kept
+    det = BruteForceDetector(threshold=5, window_seconds=120)
+    base = datetime(2026, 7, 11, 22, 0, 0, tzinfo=timezone.utc)
+    for i in range(20_000):
+        det.process(_failed_login(f"10.{i // 65536}.{i // 256 % 256}.{i % 256}", base + timedelta(seconds=i)))
+    assert len(det.hits) <= 1024
+    # and detection still works afterwards
+    later = base + timedelta(seconds=20_000)
+    fired = sum(1 for i in range(5) if det.process(_failed_login("45.9.1.8", later + timedelta(seconds=i))))
+    assert fired == 1
